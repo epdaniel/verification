@@ -71,7 +71,7 @@ public class TSTestUtils {
      * @return a simple transition system.
      */
     public static TransitionSystem<States, Actions, APs> simpleTransitionSystem() {
-        TransitionSystem<States, Actions, APs> ts = new TransitionSystem<>();
+        TransitionSystem<States, Actions, APs> ts = new TransitionSystem<States, Actions, APs>();
 
         ts.setName("Simple Transition System");
 

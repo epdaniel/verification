@@ -74,7 +74,7 @@ public class TransitionSystem<STATE, ACTION, ATOMIC_PROPOSITION> {
      * @throws FVMException If the action in use by a transition.
      */
     public void removeAction(ACTION action) throws FVMException {
-        for (var t : transitions) {
+        for (TSTransition<STATE, ACTION> t : transitions) {
             if (t.getAction().equals(action)) {
                 throw new DeletionOfAttachedActionException(action, TransitionSystemPart.TRANSITIONS);
             }

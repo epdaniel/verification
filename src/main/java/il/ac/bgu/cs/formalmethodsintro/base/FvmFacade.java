@@ -17,11 +17,14 @@ import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ParserBasedActDef;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ParserBasedCondDef;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ProgramGraph;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.AlternatingSequence;
+import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TSTransition;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TransitionSystem;
 import il.ac.bgu.cs.formalmethodsintro.base.util.Pair;
 import il.ac.bgu.cs.formalmethodsintro.base.verification.VerificationResult;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 
 /**
  * Interface for the entry point class to the HW in this class. Our
@@ -56,7 +59,15 @@ public class FvmFacade {
      * @return {@code true} iff the action is deterministic.
      */
     public <S, A, P> boolean isActionDeterministic(TransitionSystem<S, A, P> ts) {
-        throw new java.lang.UnsupportedOperationException();
+    	if(ts.getInitialStates().size() > 1) return false;
+    	Map<Pair<S, A>, Boolean> seenTransitions = new HashMap<Pair<S, A>, Boolean>();
+    	for (TSTransition<S, A> t : ts.getTransitions()){
+    		if (seenTransitions.containsKey(new Pair<S, A>(t.getFrom(), t.getAction()))){
+    			return false;
+    		}
+    		seenTransitions.put(new Pair<S, A>(t.getFrom(), t.getAction()), true);
+    	}
+    	return true;
     }
 
     /**
@@ -70,7 +81,24 @@ public class FvmFacade {
      * @return {@code true} iff the action is ap-deterministic.
      */
     public <S, A, P> boolean isAPDeterministic(TransitionSystem<S, A, P> ts) {
-        throw new java.lang.UnsupportedOperationException();
+    	if(ts.getInitialStates().size() > 1) return false;
+    	Map<S, Set<Set<P>>> seenTransitions = new HashMap<S, Set<Set<P>>> ();
+    	for (TSTransition<S, A> t : ts.getTransitions()){
+    		if (seenTransitions.containsKey(t.getFrom())){
+    			Set<Set<P>> postLabels = seenTransitions.get(t.getFrom());
+     			if(postLabels.contains(ts.getLabel(t.getTo()))){
+    				return false;
+    			}else
+    			{
+    				postLabels.add(ts.getLabel(t.getTo()));
+    				seenTransitions.put(t.getFrom(), postLabels);
+    			}
+    		}
+			Set<Set<P>> postLabels =  new HashSet<Set<P>>();
+			postLabels.add(ts.getLabel(t.getTo()));
+    		seenTransitions.put(t.getFrom(), postLabels);
+    	}
+    	return true;
     }
 
     /**
@@ -149,7 +177,7 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S, A> boolean isStateTerminal(TransitionSystem<S, A, ?> ts, S s) {
-        throw new java.lang.UnsupportedOperationException();
+    	return post(ts, s).size() == 0;
     }
 
     /**
@@ -160,8 +188,17 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, S s) {
-        throw new java.lang.UnsupportedOperationException();
-    }
+    	Set<S> post = new HashSet<S>();
+    	boolean found = false;
+    	for(TSTransition<S, ?> t : ts.getTransitions()){
+    		if(t.getFrom().equals(s)){
+    			post.add(t.getTo());    			
+    			found = true;
+    		}
+    	}
+    	if(!found) throw new StateNotFoundException(s);
+    	return post;
+	}
 
     /**
      * @param <S> Type of states.
@@ -172,8 +209,11 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, Set<S> c) {
-        throw new java.lang.UnsupportedOperationException();
-    }
+    	Set<S> post = new HashSet<S>();
+		for(S s : c)
+    		post.addAll(post(ts, s));
+    	return post;
+    }	
 
     /**
      * @param <S> Type of states.
@@ -186,8 +226,18 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, S s, A a) {
-        throw new java.lang.UnsupportedOperationException();
-    }
+    	Set<S> post = new HashSet<S>();
+    	boolean found = false;
+    	for(TSTransition<S, A> t : ts.getTransitions()){
+    		if(t.getFrom().equals(s)){
+    			found = true;
+    			if(t.getAction().equals(a))
+    				post.add(t.getTo());
+    		}
+    	}
+    	if(!found) throw new StateNotFoundException(s);
+    	return post;
+	}
 
     /**
      * @param <S> Type of states.
