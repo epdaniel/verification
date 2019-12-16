@@ -268,6 +268,28 @@ public class TransitionSystem<STATE, ACTION, ATOMIC_PROPOSITION> {
     }
 
     /**
+     * Label a state by a set of atomic propositions. Adds the labels and the state to
+     * {@code this}, if they are not already part of it.
+     *
+     * @param s A state
+     * @param p A set of atomic propositions.
+     */
+    public void addToLabel(STATE s, Set<ATOMIC_PROPOSITION> p) {
+        addState(s);
+        for(ATOMIC_PROPOSITION ap : p){
+	        addAtomicProposition(ap);
+	        Set<ATOMIC_PROPOSITION> labelSet = labelingFunction.get(s);
+	
+	        if (labelSet == null) {
+	            labelSet = new HashSet<>();
+	            labelingFunction.put(s, labelSet);
+	        }
+	
+	        labelSet.add(ap);
+        }
+    }
+    
+    /**
      * Returns the label of state {@code s}. Result is never {@code null}, but
      * might be an empty set.
      *

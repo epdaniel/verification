@@ -3,12 +3,14 @@ package il.ac.bgu.cs.formalmethodsintro.base;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import il.ac.bgu.cs.formalmethodsintro.base.automata.Automaton;
 import il.ac.bgu.cs.formalmethodsintro.base.automata.MultiColorAutomaton;
 import il.ac.bgu.cs.formalmethodsintro.base.channelsystem.ChannelSystem;
 import il.ac.bgu.cs.formalmethodsintro.base.circuits.Circuit;
+import il.ac.bgu.cs.formalmethodsintro.base.circuits.CircuitImp;
 import il.ac.bgu.cs.formalmethodsintro.base.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.formalmethodsintro.base.ltl.LTL;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ActionDef;
@@ -21,6 +23,8 @@ import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TSTransition;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TransitionSystem;
 import il.ac.bgu.cs.formalmethodsintro.base.util.Pair;
 import il.ac.bgu.cs.formalmethodsintro.base.verification.VerificationResult;
+
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -249,8 +253,13 @@ public class FvmFacade {
      * in {@code c}, when action {@code a} is selected.
      */
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
-        throw new java.lang.UnsupportedOperationException();
-    }
+    	Set<S> pre = new HashSet<S>();
+    	for(TSTransition<S, A> t : ts.getTransitions()){
+    		if(t.getAction().equals(a) && c.contains(t.getTo()))
+    			pre.add(t.getFrom());
+    	}
+    	return pre;
+	}
 
     /**
      * @param <S> Type of states.
@@ -259,8 +268,13 @@ public class FvmFacade {
      * @return All the states in {@code Pre(s)}, in the context of {@code ts}.
      */
     public <S> Set<S> pre(TransitionSystem<S, ?, ?> ts, S s) {
-        throw new java.lang.UnsupportedOperationException();
-    }
+    	Set<S> pre = new HashSet<S>();
+    	for(TSTransition<S, ?> t : ts.getTransitions()){
+    		if(t.getTo().equals(s))
+    			pre.add(t.getFrom());
+    	}
+    	return pre;
+	}
 
     /**
      * @param <S> Type of states.
@@ -271,7 +285,20 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S> Set<S> pre(TransitionSystem<S, ?, ?> ts, Set<S> c) {
-        throw new java.lang.UnsupportedOperationException();
+    	Set<S> pre = new HashSet<S>();
+    	HashMap<S, Boolean> founds = new HashMap<S, Boolean>();
+    	for(S s : c){
+    		founds.put(s, false);
+    	}
+    	for(TSTransition<S, ?> t : ts.getTransitions()){
+    		if(c.contains(t.getTo())){
+    			pre.add(t.getFrom());
+    			founds.put(t.getTo(), true);
+    		}
+    	}
+    	for(Entry<S, Boolean> en : founds.entrySet())
+    		if(!en.getValue()) throw new StateNotFoundException(en.getKey());
+    	return pre;    
     }
 
     /**
@@ -285,7 +312,17 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, S s, A a) {
-        throw new java.lang.UnsupportedOperationException();
+    	Set<S> pre = new HashSet<S>();
+    	boolean found = false;
+    	for(TSTransition<S, A> t : ts.getTransitions()){
+    		if(t.getTo().equals(s)){
+    			found = true;
+    			if(t.getAction().equals(a))
+    				pre.add(t.getFrom());
+			}
+    	}
+    	if(!found) throw new StateNotFoundException(s);
+    	return pre;
     }
 
     /**
@@ -299,7 +336,10 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
-        throw new java.lang.UnsupportedOperationException();
+    	Set<S> pre = new HashSet<S>();
+    	for(S s : c)
+    		pre.addAll(pre(ts, s, a));
+    	return pre;
     }
 
     /**
@@ -311,9 +351,24 @@ public class FvmFacade {
      * @return All states reachable in {@code ts}.
      */
     public <S, A> Set<S> reach(TransitionSystem<S, A, ?> ts) {
-        throw new java.lang.UnsupportedOperationException();
+    	Set<S> reachable = new HashSet<>();
+    	for(S state : ts.getInitialStates()){
+			reachHelp(reachable, ts, state);
+    	}
+    	return reachable;
     }
 
+    public <S, A> void reachHelp(Set<S> reachable, TransitionSystem<S, A, ?> ts, S s) {
+    	if(!reachable.contains(s))
+    		reachable.add(s);
+    	else return;
+    	if(!isStateTerminal(ts, s)){
+    		for(S state : post(ts,s)){
+				reachHelp(reachable, ts, state);
+    		}
+    	}
+    }
+    
     /**
      * Compute the synchronous product of two transition systems.
      *
@@ -328,7 +383,44 @@ public class FvmFacade {
      */
     public <S1, S2, A, P> TransitionSystem<Pair<S1, S2>, A, P> interleave(TransitionSystem<S1, A, P> ts1,
             TransitionSystem<S2, A, P> ts2) {
-        throw new java.lang.UnsupportedOperationException();
+    	List<Pair<S1, S2>> toProcess = new ArrayList<Pair<S1, S2>>(); //set of states to process
+    	List<Pair<S1, S2>> wasProcessed = new ArrayList<Pair<S1, S2>>(); //set of states we already processed, to keep track
+    	TransitionSystem<Pair<S1, S2>, A, P> output = new TransitionSystem<Pair<S1, S2>, A, P>();
+    	output.setName("Interleaved Transition System");
+    	for(S1 is1 : ts1.getInitialStates()){
+    		for(S2 is2 : ts2.getInitialStates()){
+    			Pair<S1, S2> is = new Pair<S1, S2>(is1, is2);
+    			toProcess.add(is);
+    		}
+    	}
+    	while(!toProcess.isEmpty()){
+    		Pair<S1, S2> state = toProcess.remove(0);
+    		wasProcessed.add(state);
+    		if(ts1.getInitialStates().contains(state.first) && ts2.getInitialStates().contains(state.second)){
+    			output.addInitialState(state);
+    		} else output.addState(state);
+    		for(TSTransition<S1, A> t1 : ts1.getTransitions()){
+    			if(!t1.getFrom().equals(state.first))
+    				continue;
+    			Pair<S1, S2> toState = new Pair<S1, S2>(t1.getTo(), state.second);
+    			output.addTransition(new TSTransition<Pair<S1, S2>, A>(state, t1.getAction(), toState));
+    			output.addToLabel(toState, ts1.getLabel(toState.first));
+    			output.addToLabel(toState, ts2.getLabel(toState.second));
+    			if(!wasProcessed.contains(toState))
+    				toProcess.add(toState);
+    		}
+    		for(TSTransition<S2, A> t2 : ts2.getTransitions()){
+    			if(!t2.getFrom().equals(state.second))
+    				continue;
+    			Pair<S1, S2> toState = new Pair<S1, S2>(state.first, t2.getTo());
+    			output.addToLabel(toState, ts1.getLabel(toState.first));
+    			output.addToLabel(toState, ts2.getLabel(toState.second));
+    			output.addTransition(new TSTransition<Pair<S1, S2>, A>(state, t2.getAction(), toState));
+    			if(!wasProcessed.contains(toState))
+    				toProcess.add(toState);
+    		}
+    	}
+        return output;
     }
 
     /**
@@ -346,7 +438,59 @@ public class FvmFacade {
      */
     public <S1, S2, A, P> TransitionSystem<Pair<S1, S2>, A, P> interleave(TransitionSystem<S1, A, P> ts1,
             TransitionSystem<S2, A, P> ts2, Set<A> handShakingActions) {
-        throw new java.lang.UnsupportedOperationException();
+    	List<Pair<S1, S2>> toProcess = new ArrayList<Pair<S1, S2>>(); //set of states to process
+    	List<Pair<S1, S2>> wasProcessed = new ArrayList<Pair<S1, S2>>(); //set of states we already processed, to keep track
+    	TransitionSystem<Pair<S1, S2>, A, P> output = new TransitionSystem<Pair<S1, S2>, A, P>();
+    	output.setName("Interleaved Transition System with HankShaking actions");
+    	for(S1 is1 : ts1.getInitialStates()){
+    		for(S2 is2 : ts2.getInitialStates()){
+    			Pair<S1, S2> is = new Pair<S1, S2>(is1, is2);
+    			toProcess.add(is);
+    		}
+    	}
+    	while(!toProcess.isEmpty()){
+    		Pair<S1, S2> state = toProcess.remove(0);
+    		wasProcessed.add(state);
+    		if(ts1.getInitialStates().contains(state.first) && ts2.getInitialStates().contains(state.second)){
+    			output.addInitialState(state);
+    		} else output.addState(state);
+    		for(TSTransition<S1, A> t1 : ts1.getTransitions()){
+    			if(!t1.getFrom().equals(state.first))
+    				continue;
+    			if(handShakingActions.contains(t1.getAction())){ //This transition is using a handshaking action
+    	    		for(TSTransition<S2, A> t2 : ts2.getTransitions()){ //find the corresponding ts2 transition
+    	    			if(!t2.getFrom().equals(state.second) || !t2.getAction().equals(t1.getAction()))
+    	    				continue;
+    	    			Pair<S1, S2> toState = new Pair<S1, S2>(t1.getTo(), t2.getTo());
+    	    			output.addTransition(new TSTransition<Pair<S1, S2>, A>(state, t1.getAction(), toState));
+    	    			output.addToLabel(toState, ts1.getLabel(toState.first));
+    	    			output.addToLabel(toState, ts2.getLabel(toState.second));
+    	    			if(!wasProcessed.contains(toState))
+    	    				toProcess.add(toState);
+    	    		}
+    				continue;
+    			}
+    			Pair<S1, S2> toState = new Pair<S1, S2>(t1.getTo(), state.second);
+    			output.addTransition(new TSTransition<Pair<S1, S2>, A>(state, t1.getAction(), toState));
+    			output.addToLabel(toState, ts1.getLabel(toState.first));
+    			output.addToLabel(toState, ts2.getLabel(toState.second));
+    			if(!wasProcessed.contains(toState))
+    				toProcess.add(toState);
+    		}
+    		for(TSTransition<S2, A> t2 : ts2.getTransitions()){
+    			if(!t2.getFrom().equals(state.second))
+    				continue;
+    			if(handShakingActions.contains(t2.getAction())) // we already handled handshake actions in ts1 transitions loop
+    				continue;
+    			Pair<S1, S2> toState = new Pair<S1, S2>(state.first, t2.getTo());
+    			output.addToLabel(toState, ts1.getLabel(toState.first));
+    			output.addToLabel(toState, ts2.getLabel(toState.second));
+    			output.addTransition(new TSTransition<Pair<S1, S2>, A>(state, t2.getAction(), toState));
+    			if(!wasProcessed.contains(toState))
+    				toProcess.add(toState);
+    		}
+    	}
+        return output;
     }
 
     /**
@@ -382,7 +526,50 @@ public class FvmFacade {
      */
     public TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> transitionSystemFromCircuit(
             Circuit c) {
-        throw new java.lang.UnsupportedOperationException();
+    	TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> output = new TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object>();
+    	output.setName("Transition System from Circuit");
+    	Set<HashMap<String, Boolean>> registersMaps = CircuitImp.initMaps(c.getRegisterNames());
+    	Set<HashMap<String, Boolean>> inputMaps = CircuitImp.initMaps(c.getInputPortNames());
+    	
+    	//All States
+		for(HashMap<String, Boolean> registersMap : registersMaps)
+    		for(HashMap<String, Boolean> inputMap : inputMaps)
+    			output.addState(new Pair<Map<String, Boolean>, Map<String, Boolean>>(registersMap, inputMap));
+		//Initial States
+		HashMap<String, Boolean> falseRegistersMap = new HashMap<String, Boolean>();
+		for(String rname : c.getRegisterNames()){
+			output.addAtomicProposition(rname);
+			falseRegistersMap.put(rname, false);
+		}
+		for(HashMap<String, Boolean> inputMap : inputMaps){
+			output.addInitialState(new Pair<Map<String, Boolean>, Map<String, Boolean>>(falseRegistersMap, inputMap));
+			output.addAction(inputMap);
+		}
+		for(String iname : c.getInputPortNames())
+			output.addAtomicProposition(iname);
+		for(String oname : c.getOutputPortNames())
+			output.addAtomicProposition(oname);
+		//Transitions and Labels
+		for(Pair<Map<String, Boolean>, Map<String, Boolean>> state : output.getStates()){
+			for(Map<String, Boolean> action : output.getActions()){
+				Map<String, Boolean> tempInputs = state.second;
+				Map<String, Boolean> tempRegisters = state.first;
+				Map<String, Boolean> updatedRegs = c.updateRegisters(tempInputs, tempRegisters);
+				output.addTransition(new TSTransition<>(state, action, new Pair<Map<String, Boolean>, Map<String, Boolean>>(updatedRegs, action)));
+			}
+			for(String register : state.first.keySet())
+				if(state.first.get(register))
+					output.addToLabel(state, register);
+			for(String input : state.second.keySet())
+				if(state.second.get(input))
+					output.addToLabel(state, input);
+			Map<String, Boolean> outputs = c.computeOutputs(state.second, state.first);
+			for(String outputName : outputs.keySet())
+				if(outputs.get(outputName))
+					output.addToLabel(state, outputName);
+		}
+    	
+    	return output;
     }
 
     /**
