@@ -13,11 +13,7 @@ import il.ac.bgu.cs.formalmethodsintro.base.circuits.Circuit;
 import il.ac.bgu.cs.formalmethodsintro.base.circuits.CircuitImp;
 import il.ac.bgu.cs.formalmethodsintro.base.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.formalmethodsintro.base.ltl.LTL;
-import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ActionDef;
-import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ConditionDef;
-import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ParserBasedActDef;
-import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ParserBasedCondDef;
-import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ProgramGraph;
+import il.ac.bgu.cs.formalmethodsintro.base.programgraph.*;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.AlternatingSequence;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TSTransition;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TransitionSystem;
@@ -117,7 +113,7 @@ public class FvmFacade {
      * @return {@code true} iff {@code e} is an execution of {@code ts}.
      */
     public <S, A, P> boolean isExecution(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new java.lang.UnsupportedOperationException();
+		return isInitialExecutionFragment(ts,e) && isMaximalExecutionFragment(ts,e);
     }
 
     /**
@@ -134,7 +130,15 @@ public class FvmFacade {
      * {@code ts}.
      */
     public <S, A, P> boolean isExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new java.lang.UnsupportedOperationException();
+		while(!e.tail().isEmpty()){
+			S from = e.head();
+			A action = e.tail().head();
+			e = e.tail().tail();
+			S to = e.head();
+			if(!post(ts,from,action).contains(to))
+				return false;
+		}
+		return true;
     }
 
     /**
@@ -151,7 +155,7 @@ public class FvmFacade {
      * {@code ts}.
      */
     public <S, A, P> boolean isInitialExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new java.lang.UnsupportedOperationException();
+		return ts.getInitialStates().contains(e.head()) && isExecutionFragment(ts,e);
     }
 
     /**
@@ -167,7 +171,7 @@ public class FvmFacade {
      * @return {@code true} iff {@code e} is a maximal fragment of {@code ts}.
      */
     public <S, A, P> boolean isMaximalExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new java.lang.UnsupportedOperationException();
+		return isStateTerminal(ts,e.last()) && isExecutionFragment(ts,e);
     }
 
     /**
@@ -515,7 +519,31 @@ public class FvmFacade {
      * @return Interleaved program graph.
      */
     public <L1, L2, A> ProgramGraph<Pair<L1, L2>, A> interleave(ProgramGraph<L1, A> pg1, ProgramGraph<L2, A> pg2) {
-        throw new java.lang.UnsupportedOperationException();
+		ProgramGraph<Pair<L1, L2>, A> interleaved = createProgramGraph();
+		interleaved.setName("Interleaved program graph");
+		for (PGTransition<L1,A> t1 : pg1.getTransitions()){
+			for(L2 loc2:pg2.getLocations())
+				interleaved.addTransition(new PGTransition<>(new Pair(t1.getFrom(),loc2),t1.getCondition(),t1.getAction(),new Pair(t1.getTo(),loc2)));
+		}
+		for (PGTransition<L2,A> t2 : pg2.getTransitions()){
+			for(L1 loc1:pg1.getLocations())
+				interleaved.addTransition(new PGTransition<>(new Pair(loc1,t2.getFrom()),t2.getCondition(),t2.getAction(),new Pair(loc1,t2.getTo())));
+		}
+		//initial locations and initial conditions
+		for (L1 loc1 : pg1.getInitialLocations()){
+			for (L2 loc2 : pg2.getInitialLocations()){
+				interleaved.setInitial(new Pair<L1,L2>(loc1,loc2),true);
+			}
+		}
+		for(List<String> in1 : pg1.getInitalizations()) {
+			for(List<String> in2 : pg2.getInitalizations()){
+				List<String> init=new ArrayList<String>();
+				init.addAll(in1);
+				init.addAll(in2);
+				interleaved.addInitalization(init);
+			}
+		}
+		return interleaved;
     }
 
     /**
@@ -588,10 +616,6 @@ public class FvmFacade {
         throw new java.lang.UnsupportedOperationException();
     }
 
-    
-    
-    
-    
     
     /**
      * Creates a transition system representing channel system {@code cs}.
