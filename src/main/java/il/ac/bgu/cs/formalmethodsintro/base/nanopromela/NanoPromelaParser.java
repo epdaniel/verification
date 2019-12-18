@@ -440,7 +440,44 @@ public class NanoPromelaParser extends Parser {
     }
 
     public static class StmtContext extends ParserRuleContext {
-
+    	//-------------- ASS1 Help Functions ------------------
+    	public boolean isIfStmt(){
+    		return this.ifstmt() != null;
+    	}
+    	
+    	public boolean isDoStmt(){
+    		return this.dostmt() != null;
+    	}
+    	
+    	public boolean isAssStmt(){
+    		return this.assstmt() != null;
+    	}
+    	
+    	public boolean isChanReadStmt(){
+    		return this.chanreadstmt() != null;
+    	}
+    	
+    	public boolean isChanWriteStmt(){
+    		return this.chanwritestmt() != null;
+    	}
+    	
+    	public boolean isSkipStmt(){
+    		return this.skipstmt() != null;
+    	}
+    	
+    	public boolean isAtomicStmt(){
+    		return this.atomicstmt() != null;
+    	}
+    	
+    	public boolean isChainStmt(){
+    		return this.stmt() != null;
+    	}
+    	
+    	public boolean isSimpleStmt(){
+    		return this.isAssStmt() || this.isChanReadStmt() || this.isChanWriteStmt() || this.isAtomicStmt() || this.isSkipStmt();
+    	}
+    	//-----------------------------------------------------
+    	
         public IfstmtContext ifstmt() {
             return getRuleContext(IfstmtContext.class, 0);
         }

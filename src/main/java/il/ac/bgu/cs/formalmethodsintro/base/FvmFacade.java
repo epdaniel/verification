@@ -1,10 +1,15 @@
 package il.ac.bgu.cs.formalmethodsintro.base;
 
+import java.io.File;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 import il.ac.bgu.cs.formalmethodsintro.base.automata.Automaton;
 import il.ac.bgu.cs.formalmethodsintro.base.automata.MultiColorAutomaton;
@@ -13,8 +18,17 @@ import il.ac.bgu.cs.formalmethodsintro.base.circuits.Circuit;
 import il.ac.bgu.cs.formalmethodsintro.base.circuits.CircuitImp;
 import il.ac.bgu.cs.formalmethodsintro.base.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.formalmethodsintro.base.ltl.LTL;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaFileReader;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.AtomicstmtContext;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.DostmtContext;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.IfstmtContext;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.IntexprContext;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.OptionContext;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.SkipstmtContext;
+import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.StmtContext;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ActionDef;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ConditionDef;
+import il.ac.bgu.cs.formalmethodsintro.base.programgraph.PGTransition;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ParserBasedActDef;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ParserBasedCondDef;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ProgramGraph;
@@ -420,6 +434,9 @@ public class FvmFacade {
     				toProcess.add(toState);
     		}
     	}
+    	for(S1 s1 : ts1.getStates())
+    		for(S2 s2 : ts2.getStates())
+    			output.addState(new Pair<S1 ,S2>(s1, s2));
         return output;
     }
 
@@ -490,6 +507,9 @@ public class FvmFacade {
     				toProcess.add(toState);
     		}
     	}
+    	for(S1 s1 : ts1.getStates())
+    		for(S2 s2 : ts2.getStates())
+    			output.addState(new Pair<S1 ,S2>(s1, s2));
         return output;
     }
 
@@ -614,6 +634,104 @@ public class FvmFacade {
         throw new java.lang.UnsupportedOperationException();
     }
     
+    public String getAtomicString(AtomicstmtContext ac){
+		String action = "";
+		List<IntexprContext> inters = ac.intexpr();
+		List<TerminalNode> vars = ac.VARNAME();
+		int size = inters.size();
+		for(int i = 0; i < size; i++){
+			action += vars.get(i).getText();
+			action += ":=";
+			action += inters.get(i).getText();
+			if(i != size-1)
+				action += ";";
+		}
+		return action;
+    }
+    
+    public List<PGTransition<String, String>> contextToPGTransitions(StmtContext c, boolean isInIf, boolean isInDo){
+    	ArrayList<PGTransition<String, String>> output = new ArrayList<PGTransition<String, String>>();
+    	if(c.isSimpleStmt()){
+    		String action = c.getText();
+    		System.out.println(action + " " + isInIf +  " " + isInDo);
+    		if(c.isAtomicStmt())
+    			action = getAtomicString(c.atomicstmt());
+    		if(isInDo)
+        		output.add(new PGTransition<String, String>("", "", action,"exit")); 
+    		else {
+    			output.add(new PGTransition<String, String>(c.getText(), "true", action, "exit"));
+    			if(isInIf)
+            		output.add(new PGTransition<String, String>("", "", action,"exit")); 
+    		}
+    	} else if(c.isIfStmt()){ //If
+    		IfstmtContext stmt = c.ifstmt();
+    		for(OptionContext op : stmt.option()){
+    			StmtContext opStmt = op.stmt();
+    			List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, true, isInDo);
+    			for(PGTransition<String, String> subStmt : subStmts){
+        			if(subStmt.getFrom().equals("")){
+        				subStmt.setFrom(stmt.getText());
+        				if(subStmt.getCondition().equals("true") || subStmt.getCondition().equals(""))
+        					subStmt.setCondition(op.boolexpr().getText());
+        				else subStmt.setCondition(op.boolexpr().getText() + " && " + subStmt.getCondition());        					     
+        			}
+    			}
+    			output.addAll(subStmts);
+    		}
+    	} else if(c.isDoStmt()){ //Do
+    		DostmtContext stmt = c.dostmt();
+    		String exitCond = "";
+    		for(OptionContext op : stmt.option()){
+    			StmtContext opStmt = op.stmt();
+    			if(!exitCond.equals(""))
+    				exitCond += " && ";
+    			exitCond += "!(" + op.boolexpr().getText() + ")";
+    			List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, isInIf, true);
+    			for(PGTransition<String, String> subStmt : subStmts){
+    				if(subStmt.getFrom().equals("") && !isInDo)
+    					subStmt.setFrom(stmt.getText());
+    				else
+    					subStmt.setFrom(subStmt.getFrom() + ";" + stmt.getText());
+    				if(subStmt.getTo().equals("exit"))
+    					subStmt.setTo(stmt.getText());
+    				else
+    					subStmt.setTo(subStmt.getTo() + ";" + stmt.getText());
+    				if(subStmt.getCondition().equals(""))
+    					subStmt.setCondition(op.boolexpr().getText());
+    					
+    				
+    			}
+    			output.addAll(subStmts);
+    		}
+    		output.add(new PGTransition<String, String>(stmt.getText(), exitCond, "skip", "exit"));
+    	} else { //; - Chain Statements
+    		List<PGTransition<String, String>> subs = contextToPGTransitions(c.stmt(0), isInIf, isInDo);
+    		String rest = c.stmt(1).getText();
+    		for(PGTransition<String, String> sub : subs){
+    			if(!sub.getFrom().equals("")){
+	    			sub.setFrom(sub.getFrom()+";"+rest);
+    			}
+    			if(sub.getTo().equals("exit") || sub.getTo().equals(""))
+    				sub.setTo(rest);
+    			else sub.setTo(sub.getTo()+";"+rest);
+    		}
+    		output.addAll(subs);
+    		output.addAll(contextToPGTransitions(c.stmt(1), false, false));
+    	}  	
+    	return output;
+    }
+    
+    public ProgramGraph<String, String> contextToProgramGraph(StmtContext context){
+		ProgramGraph<String, String> output = createProgramGraph();
+		output.setInitial(context.getText(), true);
+		List<PGTransition<String, String>> transitions = contextToPGTransitions(context, false, false);
+		for(PGTransition<String, String> t : transitions)
+		{
+			System.out.println(t);
+			output.addTransition(t);
+    	}
+		return output;
+    }
     
     /**
      * Construct a program graph from nanopromela code.
@@ -623,7 +741,8 @@ public class FvmFacade {
      * @throws Exception If the code is invalid.
      */
     public ProgramGraph<String, String> programGraphFromNanoPromela(String filename) throws Exception {
-        throw new java.lang.UnsupportedOperationException();
+    	StmtContext context = NanoPromelaFileReader.pareseNanoPromelaFile(filename);
+    	return contextToProgramGraph(context);
     }
 
     /**
@@ -634,7 +753,8 @@ public class FvmFacade {
      * @throws Exception If the code is invalid.
      */
     public ProgramGraph<String, String> programGraphFromNanoPromelaString(String nanopromela) throws Exception {
-        throw new java.lang.UnsupportedOperationException();
+    	StmtContext context = NanoPromelaFileReader.pareseNanoPromelaString(nanopromela);
+    	return contextToProgramGraph(context);
     }
 
     /**
@@ -645,7 +765,8 @@ public class FvmFacade {
      * @throws Exception If the code is invalid.
      */
     public ProgramGraph<String, String> programGraphFromNanoPromela(InputStream inputStream) throws Exception {
-        throw new java.lang.UnsupportedOperationException();
+    	StmtContext context = NanoPromelaFileReader.parseNanoPromelaStream(inputStream);
+    	return contextToProgramGraph(context);
     }
 
     /**

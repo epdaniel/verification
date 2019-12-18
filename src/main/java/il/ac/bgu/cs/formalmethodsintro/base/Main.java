@@ -18,7 +18,7 @@ public class Main {
 
 	public static void main(String[] args) {
 		FvmFacade fvm = new FvmFacade();
-		TransitionSystem<States, Actions, APs>  ts1 = TSTestUtils.simpleTransitionSystem();
+		/* TransitionSystem<States, Actions, APs>  ts1 = TSTestUtils.simpleTransitionSystem();
 		//ts.addState(States.g);
 		//ts.addTransition(new TSTransition<States, Actions>(States.d,Actions.alpha,States.g));
 		TransitionSystem<States, Actions, APs>  ts2 = TSTestUtils.threeStateTS();
@@ -60,8 +60,14 @@ public class Main {
 		c.addRule(new Pair<String, LogicalExp>("r", xORr));
 		//c.addRule(new Pair<String, LogicalExp>("r2", r2XORx));
 		c.addRule(new Pair<String, LogicalExp>("y", NOTxXORr));
-		printTS(fvm.transitionSystemFromCircuit(c));
+		printTS(fvm.transitionSystemFromCircuit(c)); */
 		
+		try {
+			fvm.programGraphFromNanoPromela("nanop.txt");
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	
 	public static void printTS(TransitionSystem<?, ?, ?> ts){
