@@ -126,8 +126,12 @@ public class FvmFacade {
             A action = e.tail().head();
             e = e.tail().tail();
             S to = e.head();
-            if (!post(ts, from, action).contains(to))
+            try {
+                if (!post(ts, from, action).contains(to))
+                    return false;
+            } catch (StateNotFoundException exp) {
                 return false;
+            }
         }
         return true;
     }
@@ -187,15 +191,13 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, S s) {
+        if (!ts.getStates().contains(s)) throw new StateNotFoundException(s);
         Set<S> post = new HashSet<S>();
-        boolean found = false;
         for (TSTransition<S, ?> t : ts.getTransitions()) {
             if (t.getFrom().equals(s)) {
                 post.add(t.getTo());
-                found = true;
             }
         }
-        if (!found) throw new StateNotFoundException(s);
         return post;
     }
 
@@ -209,8 +211,13 @@ public class FvmFacade {
      */
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, Set<S> c) {
         Set<S> post = new HashSet<S>();
-        for (S s : c)
-            post.addAll(post(ts, s));
+        if (!ts.getStates().containsAll(c)) throw new StateNotFoundException(c);
+        for (TSTransition<S, ?> t : ts.getTransitions()) {
+            if (c.contains(t.getFrom())) {
+                post.add(t.getTo());
+            }
+        }
+
         return post;
     }
 
@@ -226,15 +233,13 @@ public class FvmFacade {
      */
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, S s, A a) {
         Set<S> post = new HashSet<S>();
-        boolean found = false;
+        if (!ts.getStates().contains(s)) throw new StateNotFoundException(s);
         for (TSTransition<S, A> t : ts.getTransitions()) {
             if (t.getFrom().equals(s)) {
-                found = true;
                 if (t.getAction().equals(a))
                     post.add(t.getTo());
             }
         }
-        if (!found) throw new StateNotFoundException(s);
         return post;
     }
 
@@ -248,12 +253,12 @@ public class FvmFacade {
      * in {@code c}, when action {@code a} is selected.
      */
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
-        Set<S> pre = new HashSet<S>();
+        Set<S> post = new HashSet<S>();
         for (TSTransition<S, A> t : ts.getTransitions()) {
-            if (t.getAction().equals(a) && c.contains(t.getTo()))
-                pre.add(t.getFrom());
+            if (t.getAction().equals(a) && c.contains(t.getFrom()))
+                post.add(t.getTo());
         }
-        return pre;
+        return post;
     }
 
     /**
@@ -307,16 +312,14 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, S s, A a) {
+        if (!ts.getStates().contains(s)) throw new StateNotFoundException(s);
         Set<S> pre = new HashSet<S>();
-        boolean found = false;
         for (TSTransition<S, A> t : ts.getTransitions()) {
             if (t.getTo().equals(s)) {
-                found = true;
                 if (t.getAction().equals(a))
                     pre.add(t.getFrom());
             }
         }
-        if (!found) throw new StateNotFoundException(s);
         return pre;
     }
 
@@ -331,9 +334,12 @@ public class FvmFacade {
      * @throws StateNotFoundException if {@code s} is not a state of {@code ts}.
      */
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
+        if (!ts.getStates().containsAll(c)) throw new StateNotFoundException(c);
         Set<S> pre = new HashSet<S>();
-        for (S s : c)
-            pre.addAll(pre(ts, s, a));
+        for (TSTransition<S, A> t : ts.getTransitions()) {
+            if (t.getAction().equals(a) && c.contains(t.getTo()))
+                pre.add(t.getFrom());
+        }
         return pre;
     }
 
@@ -615,11 +621,11 @@ public class FvmFacade {
                 Set<String> labels = new HashSet<String>();
                 for (String g_i : g) {
                     eval = ActionDef.effect(actionDefs, eval, g_i);
-                    labels.add(g_i);
-                    labels.add(loc_0.toString());
                 }
                 Pair<L, Map<String, Object>> init_state = new Pair(loc_0, eval);
                 output.addInitialState(init_state);
+                labels.addAll(init_state.getSecond().entrySet().stream().map(et -> et.getKey() + " = " + et.getValue().toString()).collect(Collectors.toSet()));
+                labels.add(loc_0.toString());
                 output.addToLabel(init_state, labels);
             }
         }
@@ -637,12 +643,14 @@ public class FvmFacade {
                 if (from.equals(state.first) && ConditionDef.evaluate(conditionDefs, eval, cond)) {
                     Pair<L, Map<String, Object>> new_state = new Pair<>(to, ActionDef.effect(actionDefs, eval, action));
                     //transitions and stats
-                    if (!used_states.contains(new_state))
+                    if (!used_states.contains(new_state)) {
                         q.add(new_state);
+                        used_states.add(new_state);
+                    }
                     output.addTransition(new TSTransition<>(state, action, new_state));
                     //Labeling and AP's
                     Set<String> labels = new HashSet<String>();
-                    labels.add(cond);
+                    labels.addAll(new_state.getSecond().entrySet().stream().map(et -> et.getKey() + " = " + et.getValue().toString()).collect(Collectors.toSet()));
                     labels.add(to.toString());
                     output.addToLabel(new_state, labels);
                 }
