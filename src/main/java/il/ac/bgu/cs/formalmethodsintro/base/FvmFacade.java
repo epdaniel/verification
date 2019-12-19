@@ -590,7 +590,7 @@ public class FvmFacade {
         //All States
         for (HashMap<String, Boolean> registersMap : registersMaps)
             for (HashMap<String, Boolean> inputMap : inputMaps)
-                output.addState(new Pair<Map<String, Boolean>, Map<String, Boolean>>(registersMap, inputMap));
+                output.addState(new Pair<Map<String, Boolean>, Map<String, Boolean>>(inputMap, registersMap));
         //Initial States
         HashMap<String, Boolean> falseRegistersMap = new HashMap<String, Boolean>();
         for (String rname : c.getRegisterNames()) {
@@ -598,7 +598,7 @@ public class FvmFacade {
             falseRegistersMap.put(rname, false);
         }
         for (HashMap<String, Boolean> inputMap : inputMaps) {
-            output.addInitialState(new Pair<Map<String, Boolean>, Map<String, Boolean>>(falseRegistersMap, inputMap));
+            output.addInitialState(new Pair<Map<String, Boolean>, Map<String, Boolean>>(inputMap, falseRegistersMap));
             output.addAction(inputMap);
         }
         for (String iname : c.getInputPortNames())
@@ -608,23 +608,47 @@ public class FvmFacade {
         //Transitions and Labels
         for (Pair<Map<String, Boolean>, Map<String, Boolean>> state : output.getStates()) {
             for (Map<String, Boolean> action : output.getActions()) {
-                Map<String, Boolean> tempInputs = state.second;
-                Map<String, Boolean> tempRegisters = state.first;
+                Map<String, Boolean> tempInputs = state.first;
+                Map<String, Boolean> tempRegisters = state.second;
                 Map<String, Boolean> updatedRegs = c.updateRegisters(tempInputs, tempRegisters);
-                output.addTransition(new TSTransition<>(state, action, new Pair<Map<String, Boolean>, Map<String, Boolean>>(updatedRegs, action)));
+                output.addTransition(new TSTransition<>(state, action, new Pair<Map<String, Boolean>, Map<String, Boolean>>(action, updatedRegs)));
             }
-            for (String register : state.first.keySet())
-                if (state.first.get(register))
+            for (String register : state.second.keySet())
+                if (state.second.get(register))
                     output.addToLabel(state, register);
-            for (String input : state.second.keySet())
-                if (state.second.get(input))
+            for (String input : state.first.keySet())
+                if (state.first.get(input))
                     output.addToLabel(state, input);
-            Map<String, Boolean> outputs = c.computeOutputs(state.second, state.first);
+            Map<String, Boolean> outputs = c.computeOutputs(state.first, state.second);
             for (String outputName : outputs.keySet())
                 if (outputs.get(outputName))
                     output.addToLabel(state, outputName);
         }
 
+        ArrayList<Pair<Map<String, Boolean>, Map<String, Boolean>>> toRemove = new ArrayList<>();
+        ArrayList<TSTransition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>>> transToRemove = new ArrayList<>();
+        Set<Pair<Map<String, Boolean>, Map<String, Boolean>>> reachable = reach(output);
+        for(Pair<Map<String, Boolean>, Map<String, Boolean>> s : output.getStates()){
+        	boolean isReachable = true;
+        	if(!reachable.contains(s)){
+        		toRemove.add(s);
+        		isReachable = false;
+        	}
+        	if(!isReachable){
+	        	for(TSTransition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>> t : output.getTransitions()){
+	        		if(t.getFrom().equals(s)){
+	        			transToRemove.add(t);
+	        		}
+	        	}
+        	}
+        }
+        for(TSTransition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>> tran : transToRemove){
+        	output.removeTransition(tran);
+        }
+        for(Pair<Map<String, Boolean>, Map<String, Boolean>> s : toRemove){
+        	output.removeState(s);
+        }
+        
         return output;
     }
 
