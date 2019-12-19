@@ -1,16 +1,14 @@
 package il.ac.bgu.cs.formalmethodsintro.base;
 
-import java.io.File;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.util.*;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import java.util.Set;
 
+import il.ac.bgu.cs.formalmethodsintro.base.channelsystem.ParserBasedInterleavingActDef;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import il.ac.bgu.cs.formalmethodsintro.base.automata.Automaton;
@@ -21,13 +19,11 @@ import il.ac.bgu.cs.formalmethodsintro.base.circuits.CircuitImp;
 import il.ac.bgu.cs.formalmethodsintro.base.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.formalmethodsintro.base.ltl.LTL;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaFileReader;
-import il.ac.bgu.cs.formalmethodsintro.base.programgraph.*;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.AtomicstmtContext;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.DostmtContext;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.IfstmtContext;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.IntexprContext;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.OptionContext;
-import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.SkipstmtContext;
 import il.ac.bgu.cs.formalmethodsintro.base.nanopromela.NanoPromelaParser.StmtContext;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ActionDef;
 import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ConditionDef;
@@ -42,7 +38,6 @@ import il.ac.bgu.cs.formalmethodsintro.base.util.Pair;
 import il.ac.bgu.cs.formalmethodsintro.base.verification.VerificationResult;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -58,7 +53,6 @@ public class FvmFacade {
     private static FvmFacade INSTANCE = null;
 
     /**
-     *
      * @return an instance of this class.
      */
     public static FvmFacade get() {
@@ -449,9 +443,9 @@ public class FvmFacade {
                     toProcess.add(toState);
             }
         }
-    	for(S1 s1 : ts1.getStates())
-    		for(S2 s2 : ts2.getStates())
-    			output.addState(new Pair<S1 ,S2>(s1, s2));
+        for (S1 s1 : ts1.getStates())
+            for (S2 s2 : ts2.getStates())
+                output.addState(new Pair<S1, S2>(s1, s2));
         return output;
     }
 
@@ -521,9 +515,9 @@ public class FvmFacade {
                     toProcess.add(toState);
             }
         }
-    	for(S1 s1 : ts1.getStates())
-    		for(S2 s2 : ts2.getStates())
-    			output.addState(new Pair<S1 ,S2>(s1, s2));
+        for (S1 s1 : ts1.getStates())
+            for (S2 s2 : ts2.getStates())
+                output.addState(new Pair<S1, S2>(s1, s2));
         return output;
     }
 
@@ -713,128 +707,236 @@ public class FvmFacade {
 
     public <L, A> TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String> transitionSystemFromChannelSystem(
             ChannelSystem<L, A> cs, Set<ActionDef> actions, Set<ConditionDef> conditions) {
+        Set<ActionDef> interleaveActions = Collections.singleton(new ParserBasedInterleavingActDef());
+
         TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String> output = new TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String>();
-        for (ProgramGraph<L, A> pg : cs.getProgramGraphs()) {
+        List<Pair<List<L>, Map<String, Object>>> init_states = initial_helper(cs.getProgramGraphs(), actions);
+        // initial states
+        for (Pair<List<L>, Map<String, Object>> loc_0 : init_states) {
+            output.addInitialState(loc_0);
+            Set<String> labels = new HashSet<String>();
+            labels.addAll(loc_0.getSecond().entrySet().stream().map(et -> et.getKey() + " = " + et.getValue().toString()).collect(Collectors.toSet()));
+            labels.addAll(loc_0.getFirst().stream().map(x -> x.toString()).collect(Collectors.toSet()));
+            output.addToLabel(loc_0, labels);
+        }
+        Queue<Pair<List<L>, Map<String, Object>>> q = new LinkedList<>(output.getInitialStates());
+        List<Pair<List<L>, Map<String, Object>>> used_states = new LinkedList<>(output.getInitialStates());
+        while (!q.isEmpty()) {
+            Pair<List<L>, Map<String, Object>> state = q.remove();
+            List<Pair<PGTransition<L, A>, Integer>> questionMarks = new LinkedList<>();
+            List<Pair<PGTransition<L, A>, Integer>> exclamationMark = new LinkedList<>();
+            Integer index = 0;
+            for (ProgramGraph<L, A> pg : cs.getProgramGraphs()) {
+                for (PGTransition<L, A> trans : pg.getTransitions()) {
+                    L from = trans.getFrom();
+                    A action = trans.getAction();
+                    L to = trans.getTo();
+                    String cond = trans.getCondition();
+                    List<L> locs = state.getFirst();
+                    Map<String, Object> eval = state.getSecond();
+                    if (locs.get(index).equals(from) && ConditionDef.evaluate(conditions, eval, cond)) {
+                        if (!action.toString().startsWith("_")) {
+                            List<L> copy_locs = new LinkedList(locs);
+                            copy_locs.set(index, to);
+                            Map<String, Object> new_eval = ActionDef.effect(actions, eval, action);
+                            Pair<List<L>, Map<String, Object>> new_state = new Pair(copy_locs, new_eval);
+                            if (new_eval == null) continue;
+                            if (!used_states.contains(new_state)) {
+                                q.add(new_state);
+                                used_states.add(new_state);
+                            }
+                            output.addTransition(new TSTransition<>(state, action, new_state));
+                            //Labeling and AP's
+                            Set<String> labels = new HashSet<String>();
+                            labels.addAll(new_state.getSecond().entrySet().stream().map(et -> et.getKey() + " = " + et.getValue().toString()).collect(Collectors.toSet()));
+                            labels.addAll(new_state.getFirst().stream().map(x -> x.toString()).collect(Collectors.toSet()));
+                            output.addToLabel(new_state, labels);
+                        } else {
+                            if (action.toString().contains("?")) {
+                                questionMarks.add(new Pair(trans, index));
+                                doInterleaveAction(interleaveActions, output, q, used_states, state, exclamationMark, index, from, action, to, locs, eval);
+                            } else {
+                                exclamationMark.add(new Pair(trans, index));
+                                doInterleaveAction(interleaveActions, output, q, used_states, state, questionMarks, index, from, action, to, locs, eval);
+                            }
 
 
+                        }
+                    }
+
+                }
+                index++;
+            }
+        }
+
+        return output;
+    }
+
+    private <L, A> void doInterleaveAction(Set<ActionDef> interleaveActions, TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String> output, Queue<Pair<List<L>, Map<String, Object>>> q, List<Pair<List<L>, Map<String, Object>>> used_states, Pair<List<L>, Map<String, Object>> state, List<Pair<PGTransition<L, A>, Integer>> mark, Integer index, L from, A action, L to, List<L> locs, Map<String, Object> eval) {
+        for (Pair<PGTransition<L, A>, Integer> e : mark) {
+            if (!e.getSecond().equals(index)) {
+                List<L> copy_locs = new LinkedList(locs);
+                copy_locs.set(locs.indexOf(from), to);
+                copy_locs.set(locs.indexOf(e.getFirst().getFrom()), e.getFirst().getTo());
+                String newAction = e.getFirst().getAction().toString() + "|" + action.toString();
+//                System.out.println(newAction);
+                Map<String, Object> new_eval = ActionDef.effect(interleaveActions, eval, newAction);
+                Pair<List<L>, Map<String, Object>> new_state = new Pair(copy_locs, new_eval);
+                if (new_eval == null) continue;
+                if (!used_states.contains(new_state)) {
+                    q.add(new_state);
+                    used_states.add(new_state);
+                }
+                output.addTransition(new TSTransition(state, newAction, new_state));
+                //Labeling and AP's
+                Set<String> labels = new HashSet<String>();
+                labels.addAll(new_state.getSecond().entrySet().stream().map(et -> et.getKey() + " = " + et.getValue().toString()).collect(Collectors.toSet()));
+                labels.addAll(new_state.getFirst().stream().map(x -> x.toString()).collect(Collectors.toSet()));
+                output.addToLabel(new_state, labels);
+            }
+        }
+    }
+
+    public <L, A> List<Pair<List<L>, Map<String, Object>>> initial_helper(List<ProgramGraph<L, A>> pgs, Set<ActionDef> actions) {
+        List<Pair<List<L>, Map<String, Object>>> res = new LinkedList<>();
+        if (pgs.size() == 1) {
+            Set<List<String>> gs = pgs.get(0).getInitalizations();
+            if (gs.isEmpty()) {
+                gs = new HashSet<>();
+                gs.add(new LinkedList<>());
+            }
+
+            for (List<String> g : gs) {
+                Map<String, Object> eval = new HashMap<String, Object>();
+                for (String g_i : g) {
+                    eval = ActionDef.effect(actions, eval, g_i);
+                }
+                for (L init : pgs.get(0).getInitialLocations()) {
+                    List<L> loc = new LinkedList();
+                    loc.add(init);
+                    res.add(new Pair(loc, eval));
+                }
+            }
+        } else {
+            List<Pair<List<L>, Map<String, Object>>> rec = initial_helper(pgs.subList(0, pgs.size() - 1), actions);
+            Set<List<String>> gs = pgs.get(pgs.size() - 1).getInitalizations();
+            if (gs.isEmpty()) {
+                gs = new HashSet<>();
+                gs.add(new LinkedList<>());
+            }
+            for (List<String> g : gs)
+                for (Pair<List<L>, Map<String, Object>> e : rec) {
+                    Map<String, Object> eval = e.getSecond();
+                    for (String g_i : g) {
+                        eval = ActionDef.effect(actions, eval, g_i);
+                    }
+                    for (L loc : pgs.get(pgs.size() - 1).getInitialLocations()) {
+                        Pair<List<L>, Map<String, Object>> dummy = new Pair(new LinkedList(e.getFirst()), eval);
+                        dummy.getFirst().add(loc);
+                        res.add(dummy);
+                    }
+                }
+        }
+        return res;
+    }
+
+
+    public String getAtomicString(AtomicstmtContext ac) {
+        String action = "";
+        List<IntexprContext> inters = ac.intexpr();
+        List<TerminalNode> vars = ac.VARNAME();
+        int size = inters.size();
+        for (int i = 0; i < size; i++) {
+            action += vars.get(i).getText();
+            action += ":=";
+            action += inters.get(i).getText();
+            if (i != size - 1)
+                action += ";";
+        }
+        return action;
+    }
+
+    public List<PGTransition<String, String>> contextToPGTransitions(StmtContext c, boolean isInIf, boolean isInDo) {
+        ArrayList<PGTransition<String, String>> output = new ArrayList<PGTransition<String, String>>();
+        if (c.isSimpleStmt()) {
+            String action = c.getText();
+            System.out.println(action + " " + isInIf + " " + isInDo);
+            if (c.isAtomicStmt())
+                action = getAtomicString(c.atomicstmt());
+            if (isInDo)
+                output.add(new PGTransition<String, String>("", "", action, "exit"));
+            else {
+                output.add(new PGTransition<String, String>(c.getText(), "true", action, "exit"));
+                if (isInIf)
+                    output.add(new PGTransition<String, String>("", "", action, "exit"));
+            }
+        } else if (c.isIfStmt()) { //If
+            IfstmtContext stmt = c.ifstmt();
+            for (OptionContext op : stmt.option()) {
+                StmtContext opStmt = op.stmt();
+                List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, true, isInDo);
+                for (PGTransition<String, String> subStmt : subStmts) {
+                    if (subStmt.getFrom().equals("")) {
+                        subStmt.setFrom(stmt.getText());
+                        if (subStmt.getCondition().equals("true") || subStmt.getCondition().equals(""))
+                            subStmt.setCondition(op.boolexpr().getText());
+                        else subStmt.setCondition(op.boolexpr().getText() + " && " + subStmt.getCondition());
+                    }
+                }
+                output.addAll(subStmts);
+            }
+        } else if (c.isDoStmt()) { //Do
+            DostmtContext stmt = c.dostmt();
+            String exitCond = "";
+            for (OptionContext op : stmt.option()) {
+                StmtContext opStmt = op.stmt();
+                if (!exitCond.equals(""))
+                    exitCond += " && ";
+                exitCond += "!(" + op.boolexpr().getText() + ")";
+                List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, isInIf, true);
+                for (PGTransition<String, String> subStmt : subStmts) {
+                    if (subStmt.getFrom().equals("") && !isInDo)
+                        subStmt.setFrom(stmt.getText());
+                    else
+                        subStmt.setFrom(subStmt.getFrom() + ";" + stmt.getText());
+                    if (subStmt.getTo().equals("exit"))
+                        subStmt.setTo(stmt.getText());
+                    else
+                        subStmt.setTo(subStmt.getTo() + ";" + stmt.getText());
+                    if (subStmt.getCondition().equals(""))
+                        subStmt.setCondition(op.boolexpr().getText());
+
+
+                }
+                output.addAll(subStmts);
+            }
+            output.add(new PGTransition<String, String>(stmt.getText(), exitCond, "skip", "exit"));
+        } else { //; - Chain Statements
+            List<PGTransition<String, String>> subs = contextToPGTransitions(c.stmt(0), isInIf, isInDo);
+            String rest = c.stmt(1).getText();
+            for (PGTransition<String, String> sub : subs) {
+                if (!sub.getFrom().equals("")) {
+                    sub.setFrom(sub.getFrom() + ";" + rest);
+                }
+                if (sub.getTo().equals("exit") || sub.getTo().equals(""))
+                    sub.setTo(rest);
+                else sub.setTo(sub.getTo() + ";" + rest);
+            }
+            output.addAll(subs);
+            output.addAll(contextToPGTransitions(c.stmt(1), false, false));
         }
         return output;
     }
 
-    public <L> List<List<L>> initial_helper(List<Set<L>> init_states) {
-        List<List<L>> res = new LinkedList<>();
-        if (init_states.size() == 1)
-            res.add(init_states.get(init_states.size() - 1).stream().collect(Collectors.toList()));
-        else {
-            List<List<L>> rec = initial_helper(init_states.subList(0, init_states.size() - 1));
-            for (L l : init_states.get(init_states.size() - 1)) {
-                for (List<L> e : rec) {
-                    List<L> dummy = new LinkedList<>(e);
-                    dummy.add(l);
-                    res.add(dummy);
-                }
-            }
-
+    public ProgramGraph<String, String> contextToProgramGraph(StmtContext context) {
+        ProgramGraph<String, String> output = createProgramGraph();
+        output.setInitial(context.getText(), true);
+        List<PGTransition<String, String>> transitions = contextToPGTransitions(context, false, false);
+        for (PGTransition<String, String> t : transitions) {
+            System.out.println(t);
+            output.addTransition(t);
         }
-        return res;
-    }
-    public String getAtomicString(AtomicstmtContext ac){
-		String action = "";
-		List<IntexprContext> inters = ac.intexpr();
-		List<TerminalNode> vars = ac.VARNAME();
-		int size = inters.size();
-		for(int i = 0; i < size; i++){
-			action += vars.get(i).getText();
-			action += ":=";
-			action += inters.get(i).getText();
-			if(i != size-1)
-				action += ";";
-		}
-		return action;
-    }
-    
-    public List<PGTransition<String, String>> contextToPGTransitions(StmtContext c, boolean isInIf, boolean isInDo){
-    	ArrayList<PGTransition<String, String>> output = new ArrayList<PGTransition<String, String>>();
-    	if(c.isSimpleStmt()){
-    		String action = c.getText();
-    		System.out.println(action + " " + isInIf +  " " + isInDo);
-    		if(c.isAtomicStmt())
-    			action = getAtomicString(c.atomicstmt());
-    		if(isInDo)
-        		output.add(new PGTransition<String, String>("", "", action,"exit")); 
-    		else {
-    			output.add(new PGTransition<String, String>(c.getText(), "true", action, "exit"));
-    			if(isInIf)
-            		output.add(new PGTransition<String, String>("", "", action,"exit")); 
-    		}
-    	} else if(c.isIfStmt()){ //If
-    		IfstmtContext stmt = c.ifstmt();
-    		for(OptionContext op : stmt.option()){
-    			StmtContext opStmt = op.stmt();
-    			List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, true, isInDo);
-    			for(PGTransition<String, String> subStmt : subStmts){
-        			if(subStmt.getFrom().equals("")){
-        				subStmt.setFrom(stmt.getText());
-        				if(subStmt.getCondition().equals("true") || subStmt.getCondition().equals(""))
-        					subStmt.setCondition(op.boolexpr().getText());
-        				else subStmt.setCondition(op.boolexpr().getText() + " && " + subStmt.getCondition());        					     
-        			}
-    			}
-    			output.addAll(subStmts);
-    		}
-    	} else if(c.isDoStmt()){ //Do
-    		DostmtContext stmt = c.dostmt();
-    		String exitCond = "";
-    		for(OptionContext op : stmt.option()){
-    			StmtContext opStmt = op.stmt();
-    			if(!exitCond.equals(""))
-    				exitCond += " && ";
-    			exitCond += "!(" + op.boolexpr().getText() + ")";
-    			List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, isInIf, true);
-    			for(PGTransition<String, String> subStmt : subStmts){
-    				if(subStmt.getFrom().equals("") && !isInDo)
-    					subStmt.setFrom(stmt.getText());
-    				else
-    					subStmt.setFrom(subStmt.getFrom() + ";" + stmt.getText());
-    				if(subStmt.getTo().equals("exit"))
-    					subStmt.setTo(stmt.getText());
-    				else
-    					subStmt.setTo(subStmt.getTo() + ";" + stmt.getText());
-    				if(subStmt.getCondition().equals(""))
-    					subStmt.setCondition(op.boolexpr().getText());
-    					
-    				
-    			}
-    			output.addAll(subStmts);
-    		}
-    		output.add(new PGTransition<String, String>(stmt.getText(), exitCond, "skip", "exit"));
-    	} else { //; - Chain Statements
-    		List<PGTransition<String, String>> subs = contextToPGTransitions(c.stmt(0), isInIf, isInDo);
-    		String rest = c.stmt(1).getText();
-    		for(PGTransition<String, String> sub : subs){
-    			if(!sub.getFrom().equals("")){
-	    			sub.setFrom(sub.getFrom()+";"+rest);
-    			}
-    			if(sub.getTo().equals("exit") || sub.getTo().equals(""))
-    				sub.setTo(rest);
-    			else sub.setTo(sub.getTo()+";"+rest);
-    		}
-    		output.addAll(subs);
-    		output.addAll(contextToPGTransitions(c.stmt(1), false, false));
-    	}  	
-    	return output;
-    }
-    
-    public ProgramGraph<String, String> contextToProgramGraph(StmtContext context){
-		ProgramGraph<String, String> output = createProgramGraph();
-		output.setInitial(context.getText(), true);
-		List<PGTransition<String, String>> transitions = contextToPGTransitions(context, false, false);
-		for(PGTransition<String, String> t : transitions)
-		{
-			System.out.println(t);
-			output.addTransition(t);
-    	}
-		return output;
+        return output;
     }
 
     /**
@@ -845,8 +947,8 @@ public class FvmFacade {
      * @throws Exception If the code is invalid.
      */
     public ProgramGraph<String, String> programGraphFromNanoPromela(String filename) throws Exception {
-    	StmtContext context = NanoPromelaFileReader.pareseNanoPromelaFile(filename);
-    	return contextToProgramGraph(context);
+        StmtContext context = NanoPromelaFileReader.pareseNanoPromelaFile(filename);
+        return contextToProgramGraph(context);
     }
 
     /**
@@ -857,8 +959,8 @@ public class FvmFacade {
      * @throws Exception If the code is invalid.
      */
     public ProgramGraph<String, String> programGraphFromNanoPromelaString(String nanopromela) throws Exception {
-    	StmtContext context = NanoPromelaFileReader.pareseNanoPromelaString(nanopromela);
-    	return contextToProgramGraph(context);
+        StmtContext context = NanoPromelaFileReader.pareseNanoPromelaString(nanopromela);
+        return contextToProgramGraph(context);
     }
 
     /**
@@ -869,8 +971,8 @@ public class FvmFacade {
      * @throws Exception If the code is invalid.
      */
     public ProgramGraph<String, String> programGraphFromNanoPromela(InputStream inputStream) throws Exception {
-    	StmtContext context = NanoPromelaFileReader.parseNanoPromelaStream(inputStream);
-    	return contextToProgramGraph(context);
+        StmtContext context = NanoPromelaFileReader.parseNanoPromelaStream(inputStream);
+        return contextToProgramGraph(context);
     }
 
     /**
@@ -885,7 +987,8 @@ public class FvmFacade {
      * @param aut    The automaton.
      * @return The product of {@code ts} with {@code aut}.
      */
-    public <Sts, Saut, A, P> TransitionSystem<Pair<Sts, Saut>, A, Saut> product(TransitionSystem<Sts, A, P> ts,
+    public <
+            Sts, Saut, A, P> TransitionSystem<Pair<Sts, Saut>, A, Saut> product(TransitionSystem<Sts, A, P> ts,
                                                                                 Automaton<Saut, P> aut) {
         throw new java.lang.UnsupportedOperationException();
     }
