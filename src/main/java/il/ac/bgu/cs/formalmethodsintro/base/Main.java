@@ -10,6 +10,8 @@ import il.ac.bgu.cs.formalmethodsintro.base.circuits.CircuitImp;
 import il.ac.bgu.cs.formalmethodsintro.base.circuits.CompoundLogicalExp;
 import il.ac.bgu.cs.formalmethodsintro.base.circuits.LogicalExp;
 import il.ac.bgu.cs.formalmethodsintro.base.circuits.LogicalExp.LogicalOp;
+import il.ac.bgu.cs.formalmethodsintro.base.programgraph.PGTransition;
+import il.ac.bgu.cs.formalmethodsintro.base.programgraph.ProgramGraph;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TSTransition;
 import il.ac.bgu.cs.formalmethodsintro.base.transitionsystem.TransitionSystem;
 import il.ac.bgu.cs.formalmethodsintro.base.util.Pair;
@@ -63,7 +65,9 @@ public class Main {
 		printTS(fvm.transitionSystemFromCircuit(c)); */
 		
 		try {
-			fvm.programGraphFromNanoPromela("nanop.txt");
+			ProgramGraph<String, String> g = fvm.programGraphFromNanoPromela("nanop.txt");
+			for(PGTransition<String, String> t : g.getTransitions())
+				System.out.println(t);
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

@@ -777,90 +777,74 @@ public class FvmFacade {
 		return action;
     }
     
-    public List<PGTransition<String, String>> contextToPGTransitions(StmtContext c, boolean isNested){
+    public List<PGTransition<String, String>> contextToPGTransitions(StmtContext c, boolean isInIf, boolean isInDo){
     	ArrayList<PGTransition<String, String>> output = new ArrayList<PGTransition<String, String>>();
-    	if(c.isSimpleStmt()){ // Simple Statement
+    	if(c.isSimpleStmt()){
     		String action = c.getText();	
     		if(c.isAtomicStmt())
     			action = getAtomicString(c.atomicstmt());
-    		if(isNested)
+    		if(isInDo)
         		output.add(new PGTransition<String, String>("", "", action,"")); 
-    		else
+    		else {
     			output.add(new PGTransition<String, String>(c.getText(), "", action, ""));
-    	} else if(c.isIfStmt()){ //If Statement
-    		IfstmtContext ifStmt = c.ifstmt();
-    		for(OptionContext op : ifStmt.option()){
-    			StmtContext opStmt = op.stmt();
-    			List<PGTransition<String, String>> subTrans = contextToPGTransitions(opStmt, true);
-    			for(PGTransition<String, String> subTran : subTrans){
-    				if(!isNested && subTran.getFrom().equals(""))
-    					subTran.setFrom(ifStmt.getText());
-    				if(subTran.getFrom().equals(ifStmt.getText()) || subTran.getFrom().equals("")){
-    					if(subTran.getCondition().equals(""))
-    						subTran.setCondition("(" + op.boolexpr() + ")");
-    					else
-    						subTran.setCondition("(" + op.boolexpr() + ") && (" + subTran.getCondition());
-    					
-    				}
-    			}
-    			output.addAll(subTrans);
+    			if(isInIf)
+            		output.add(new PGTransition<String, String>("", "", action,"")); 
     		}
-    	} else if(c.isDoStmt()){ //Do Statement
+    	} else if(c.isIfStmt()){ //If
+    		IfstmtContext stmt = c.ifstmt();
+    		for(OptionContext op : stmt.option()){
+    			StmtContext opStmt = op.stmt();
+    			List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, true, isInDo);
+    			for(PGTransition<String, String> subStmt : subStmts){
+        			if(subStmt.getFrom().equals("")){
+        				subStmt.setFrom(stmt.getText());
+        				if(subStmt.getCondition().equals(""))
+        					subStmt.setCondition(op.boolexpr().getText());
+        				else subStmt.setCondition(op.boolexpr().getText() + " && " + subStmt.getCondition());        					     
+        			}
+    			}
+    			output.addAll(subStmts);
+    		}
+    	} else if(c.isDoStmt()){ //Do
     		DostmtContext stmt = c.dostmt();
     		String exitCond = "";
     		for(OptionContext op : stmt.option()){
     			StmtContext opStmt = op.stmt();
     			if(!exitCond.equals(""))
-    				exitCond += " || ";
-    			exitCond += "(" + op.boolexpr().getText() + ")";
-    			List<PGTransition<String, String>> subTrans = contextToPGTransitions(opStmt, true);
-    			for(PGTransition<String, String> subTran : subTrans){
-    				if(!subTran.getFrom().equals(""))
-    					subTran.setFrom(subTran.getFrom() + ";" + stmt.getText());
-    				else if(!isNested)
-    					subTran.setFrom(stmt.getText());
-    				
-    				if(subTran.getFrom().equals(stmt.getText()) || subTran.getFrom().equals(""))
-    				{
-    					if(subTran.getCondition().equals(""))	
-    						subTran.setCondition("(" + op.boolexpr().getText() + ")");
-    					else 
-    						subTran.setCondition("(" + op.boolexpr().getText() + ") && (" + subTran.getCondition() + ")");
-						
-    				}
-    				
-    				if(subTran.getTo().equals(""))
-    					subTran.setTo(stmt.getText());
+    				exitCond += " && ";
+    			exitCond += "!(" + op.boolexpr().getText() + ")";
+    			List<PGTransition<String, String>> subStmts = contextToPGTransitions(opStmt, isInIf, true);
+    			for(PGTransition<String, String> subStmt : subStmts){
+    				if(isInIf && !subStmt.getFrom().equals(""))
+    					subStmt.setFrom(subStmt.getFrom() + ";" + stmt.getText());
+    				if(subStmt.getFrom().equals(""))
+    					subStmt.setFrom(stmt.getText());
     				else
-    					subTran.setTo(subTran.getTo() + ";" + stmt.getText());
+    					subStmt.setFrom(subStmt.getFrom() + ";" + stmt.getText());
+    				if(subStmt.getTo().equals(""))
+    					subStmt.setTo(stmt.getText());
+    				else
+    					subStmt.setTo(subStmt.getTo() + ";" + stmt.getText());
+    				if(subStmt.getCondition().equals(""))
+    					subStmt.setCondition(op.boolexpr().getText());					
+    				
     			}
-    			output.addAll(subTrans);
-    			for(PGTransition<String, String> subTran :subTrans){
-    				if(subTran.getFrom().equals(""))
-    					output.add(new PGTransition<String, String>(stmt.getText(), subTran.getCondition(), subTran.getAction(), subTran.getTo()));
-    			}
+    			output.addAll(subStmts);
     		}
-    		exitCond = "!(" + exitCond + ")";
-    		if(isNested)
-    			output.add(new PGTransition<String, String>("", exitCond, "", ""));
     		output.add(new PGTransition<String, String>(stmt.getText(), exitCond, "", ""));
     	} else { //; - Chain Statements
-    		List<PGTransition<String, String>> subTrans = contextToPGTransitions(c.stmt(0), isNested);
+    		List<PGTransition<String, String>> subs = contextToPGTransitions(c.stmt(0), isInIf, isInDo);
     		String rest = c.stmt(1).getText();
-    		for(PGTransition<String, String> subTran : subTrans){
-    			if(isNested){
-    				if(!subTran.getFrom().equals(""))
-    					subTran.setFrom(subTran.getFrom() + ";" + rest);
-    			}else
-    				subTran.setFrom(subTran.getFrom() + ";" + rest);
-    			
-    		    if(subTran.getTo().equals(""))
-    		    	subTran.setTo(rest);
-    		    else
-    		    	subTran.setTo(subTran.getTo() + ";" + rest);
+    		for(PGTransition<String, String> sub : subs){
+    			if(!sub.getFrom().equals("")){
+	    			sub.setFrom(sub.getFrom()+";"+rest);
+    			}
+    			if(sub.getTo().equals(""))
+    				sub.setTo(rest);
+    			else sub.setTo(sub.getTo()+";"+rest);
     		}
-    		output.addAll(subTrans);
-    		output.addAll(contextToPGTransitions(c.stmt(1), false));
+    		output.addAll(subs);
+    		output.addAll(contextToPGTransitions(c.stmt(1), false, false));
     	}  	
     	return output;
     }
@@ -868,7 +852,7 @@ public class FvmFacade {
     public ProgramGraph<String, String> contextToProgramGraph(StmtContext context){
 		ProgramGraph<String, String> output = createProgramGraph();
 		output.setInitial(context.getText(), true);
-		List<PGTransition<String, String>> transitions = contextToPGTransitions(context, false);
+		List<PGTransition<String, String>> transitions = contextToPGTransitions(context, false, false);
 		for(PGTransition<String, String> t : transitions)
 		{
 			output.addTransition(t);
