@@ -864,28 +864,10 @@ public class FvmFacade {
         return res;
     }
 
-
-    public String getAtomicString(AtomicstmtContext ac) {
-        String action = "";
-        List<IntexprContext> inters = ac.intexpr();
-        List<TerminalNode> vars = ac.VARNAME();
-        int size = inters.size();
-        for (int i = 0; i < size; i++) {
-            action += vars.get(i).getText();
-            action += ":=";
-            action += inters.get(i).getText();
-            if (i != size - 1)
-                action += ";";
-        }
-        return action;
-    }
-
     public List<PGTransition<String, String>> contextToPGTransitions(StmtContext c, boolean isNested){
         ArrayList<PGTransition<String, String>> output = new ArrayList<PGTransition<String, String>>();
     	if(c.isSimpleStmt()){ // Simple Statement
     		String action = c.getText();	
-            if (c.isAtomicStmt())
-                action = getAtomicString(c.atomicstmt());
     		if(isNested)
         		output.add(new PGTransition<String, String>("", "", action,"")); 
     		else
@@ -900,9 +882,9 @@ public class FvmFacade {
     					subTran.setFrom(ifStmt.getText());
     				if(subTran.getFrom().equals(ifStmt.getText()) || subTran.getFrom().equals("")){
     					if(subTran.getCondition().equals(""))
-    						subTran.setCondition("(" + op.boolexpr() + ")");
+    						subTran.setCondition("(" + op.boolexpr().getText() + ")");
     					else
-    						subTran.setCondition("(" + op.boolexpr() + ") && (" + subTran.getCondition());
+    						subTran.setCondition("(" + op.boolexpr().getText() + ") && (" + subTran.getCondition() + ")");
     					
     				}
                 }
@@ -914,7 +896,7 @@ public class FvmFacade {
             for (OptionContext op : stmt.option()) {
                 StmtContext opStmt = op.stmt();
                 if (!exitCond.equals(""))
-    				exitCond += " || ";
+    				exitCond += "||";
     			exitCond += "(" + op.boolexpr().getText() + ")";
     			List<PGTransition<String, String>> subTrans = contextToPGTransitions(opStmt, true);
     			for(PGTransition<String, String> subTran : subTrans){
