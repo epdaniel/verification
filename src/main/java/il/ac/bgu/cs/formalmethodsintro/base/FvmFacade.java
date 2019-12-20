@@ -669,6 +669,7 @@ public class FvmFacade {
         output.setName("Transition System From Program Graph");
         // initial states
         for (L loc_0 : pg.getInitialLocations()) {
+            if(pg.getInitalizations().isEmpty()) { output.addInitialState(new Pair(loc_0, new HashMap<>()));}
             for (List<String> g : pg.getInitalizations()) {
                 Map<String, Object> eval = new HashMap<String, Object>();
                 Set<String> labels = new HashSet<String>();
@@ -708,6 +709,9 @@ public class FvmFacade {
                     output.addToLabel(new_state, labels);
                 }
             }
+            Set<String> labels = new HashSet<String>();
+            labels.add(state.getFirst().toString());
+            output.addToLabel(state,new HashSet(labels));
         }
         return output;
     }
